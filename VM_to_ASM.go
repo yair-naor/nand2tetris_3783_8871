@@ -27,7 +27,15 @@ func main() {
 		fmt.Printf("Error creating ASM file: %s\n", err)
 		os.Exit(1)
 	}
+
+	writer := bufio.NewWriter(asmFile)
+
+	if _, err := writer.WriteString("@256\nD=A\n@SP\nM=D\n"); err != nil {
+		fmt.Printf("Error initializing stack %s\n", err)
+		os.Exit(1)
+	}
 	defer asmFile.Close()
+	writer.Flush() // Ensure buffer is flushed at the end
 
 	files, err := os.ReadDir(dir) // If 'err' was declared above, use '=' instead of ':=' here.
 	if err != nil {
@@ -35,10 +43,22 @@ func main() {
 		os.Exit(1)
 	}
 
+	hasSysVM := checkForSysVM(files)
+	// Process Sys.vm first if it exists
+	if hasSysVM {
+		sysVMPath := filepath.Join(dir, "Sys.vm")
+		err := translateVMFileToASM(sysVMPath, asmFile)
+		if err != nil {
+			fmt.Printf("Error translating %s: %s\n", sysVMPath, err)
+		} else {
+			fmt.Printf("Translated %s\n", sysVMPath)
+		}
+	}
+
 	for _, entry := range files {
 		if !entry.IsDir() {
 			fileName := entry.Name()
-			if strings.HasSuffix(fileName, ".vm") {
+			if strings.HasSuffix(fileName, ".vm") && fileName != "Sys.vm" {
 				vmFilePath := filepath.Join(dir, fileName)
 				err := translateVMFileToASM(vmFilePath, asmFile) // If 'err' was declared above, use '=' instead of ':=' here.
 				if err != nil {
@@ -50,6 +70,16 @@ func main() {
 	}
 
 	fmt.Printf("Translation complete: %s\n", asmFilePath)
+}
+
+// Function to check if Sys.vm exists in the directory
+func checkForSysVM(files []os.DirEntry) bool {
+	for _, entry := range files {
+		if !entry.IsDir() && entry.Name() == "Sys.vm" {
+			return true
+		}
+	}
+	return false
 }
 
 func translateVMFileToASM(vmFilePath string, asmFile *os.File) error {
